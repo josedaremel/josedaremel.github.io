@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Turnos y disponibilidad</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1f1f1c;--mu:#6b6a63;--bd:#e0ded6;--ac:#2d6a4f;--ok:#e3f2e8;--okt:#1b5e3a;--no:#fbe9e7;--not:#9b2c1f;--dg:#b3261e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1c1a;--card:#262624;--tx:#ecebe5;--mu:#a3a29a;--bd:#3a3a36;--ac:#6fcf97;--ok:#1f3a2a;--okt:#8fe0ae;--no:#3d2522;--not:#f2a99f;--dg:#f2a99f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1c1c1a;--card:#262624;--tx:#ecebe5;--mu:#a3a29a;--bd:#3a3a36;--ac:#6fcf97;--ok:#1f3a2a;--okt:#8fe0ae;--no:#3d2522;--not:#f2a99f;--dg:#f2a99f;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:18px 14px 40px}
+h1{font-size:22px;margin:4px 0 14px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+label{font-size:13px;color:var(--mu);display:block;margin-bottom:3px}
+input,select,button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 10px}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;font-weight:600}
+button.g{background:transparent;color:var(--mu);border:1px solid var(--bd);font-weight:400;padding:4px 9px;font-size:13px}
+button.d{background:transparent;color:var(--dg);border:1px solid var(--dg);font-weight:400;padding:4px 9px;font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.res{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+@media(max-width:560px){.res{grid-template-columns:1fr}}
+.col{border-radius:10px;padding:10px}.col h3{margin:0 0 6px;font-size:14px}
+.ok{background:var(--ok);color:var(--okt)}.no{background:var(--no);color:var(--not)}
+.col div{padding:3px 0;font-size:14px}.col small{opacity:.85}
+.days{display:flex;gap:6px;flex-wrap:wrap}.days label{display:flex;align-items:center;gap:4px;margin:0;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:4px 8px;font-size:13px}
+.blk{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid var(--bd);padding:7px 0;font-size:14px}
+.mu{color:var(--mu);font-size:13px}.err{color:var(--dg);font-size:13px;min-height:18px;margin:6px 0 0}
+details{border-top:1px solid var(--bd);padding:8px 0}summary{cursor:pointer;font-size:15px}
+.q{width:100%;box-sizing:border-box}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="gate" style="max-width:360px;margin:12vh auto 0;padding:0 14px"><div class="card"><h2>Acceso</h2><label for="pw">Contraseña</label><input class="q" id="pw" type="password" autocomplete="off"><p class="err" id="ge"></p><button id="go">Entrar</button></div></div>
+<main id="app" hidden>
+<h1>Turnos y disponibilidad <button class="g" id="lock" style="float:right">Bloquear</button></h1>
+
+<section class="card">
+<h2>¿Quién puede cubrir este turno?</h2>
+<div class="row">
+<div><label for="qd">Día</label><select id="qd"></select></div>
+<div><label for="qf">Desde</label><input type="time" id="qf" value="08:00"></div>
+<div><label for="qt">Hasta</label><input type="time" id="qt" value="15:00"></div>
+</div>
+<p class="mu" id="qn"></p>
+<div class="res"><div class="col ok"><h3>Pueden</h3><div id="rok"></div></div><div class="col no"><h3>No pueden</h3><div id="rno"></div></div></div>
+</section>
+
+<section class="card">
+<h2>Trabajadores</h2>
+<div class="row"><div><label for="nn">Nuevo trabajador</label><input id="nn" placeholder="Nombre"></div><button id="add">Añadir</button></div>
+<p class="err" id="e0"></p>
+<div style="margin:6px 0 4px"><label for="qs">Buscar trabajador</label><input class="q" id="qs" type="search" placeholder="Escribe para filtrar…"></div>
+<p class="mu" id="st"></p>
+<div class="row" style="margin:0 0 8px"><button class="g" id="exp">Exportar copia</button><button class="g" id="imp">Importar copia</button><input type="file" id="impf" accept="application/json,.json" hidden></div>
+<div id="ws"></div>
+<p class="mu">Cada trabajador solo puede cubrir los turnos que caigan dentro de las franjas que marques como «disponible».</p>
+</section>
+</main>
+<script src="config.js"></script>
+<script>
+const SB=window.SUPABASE||{},CLOUD=!!(SB.url&&SB.key&&SB.email);let tok="";
+const D=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+/*PURE*/
+const toMin=s=>{const p=s.split(":").map(Number);return p[0]*60+p[1]};
+const endMin=s=>{const v=toMin(s);return v>=1439?1440:v};
+const fmt=m=>m>=1440?"24:00":String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const hrsTxt=b=>b.todo?"todo el día":b.from+"–"+b.to+(toMin(b.to)<=toMin(b.from)?" (+1 día)":"");
+function segs(b,d){
+  const out=[];
+  if(b.todo){if(b.days.includes(d))out.push([0,1440]);return out}
+  const F=toMin(b.from),T=endMin(b.to),over=T<=F;
+  if(b.days.includes(d))out.push(over?[F,1440]:[F,T]);
+  if(over&&T>0&&b.days.includes((d+6)%7))out.push([0,T]);
+  return out;
+}
+function intervals(w,d){
+  const a=[].concat(...w.disp.map(b=>segs(b,d))).sort((x,y)=>x[0]-y[0]);
+  const m=[];for(const i of a){const l=m[m.length-1];if(l&&i[0]<=l[1])l[1]=Math.max(l[1],i[1]);else m.push([i[0],i[1]])}
+  return m;
+}
+function dayInfo(w,d){
+  const out=[];
+  w.disp.forEach(b=>{const sg=segs(b,d);if(sg.length)out.push({s:sg[0][0],t:sg.map(i=>i[0]===0&&i[1]===1440?"todo el día":fmt(i[0])+"–"+fmt(i[1])).join(", "),note:b.note||""})});
+  return out.sort((a,b)=>a.s-b.s);
+}
+function canCover(w,d,f,t){
+  const F=toMin(f),T=endMin(t),has=(day,a,b)=>intervals(w,day).some(i=>i[0]<=a&&i[1]>=b);
+  if(T>F)return has(d,F,T);
+  return has(d,F,1440)&&(T===0||has((d+1)%7,0,T));
+}
+const sortW=a=>a.slice().sort((x,y)=>x.name.localeCompare(y.name,"es",{sensitivity:"base"}));
+const norm=s=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+function fromSnap(id,data){
+  const x=JSON.parse(JSON.stringify(data||{}));
+  return {id:id,name:typeof x.name==="string"?x.name:"",disp:Array.isArray(x.disp)?x.disp.filter(b=>b&&Array.isArray(b.days)&&b.from&&b.to):[]};
+}
+/*ENDPURE*/
+let W=[],col=null,open=new Set(),hrs=new Set(),pend=null,msg="";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function status(){$("st").textContent=msg||(col?"Datos guardados en la nube (compartidos).":"Datos guardados solo en este navegador.")}
+function loadLocal(){try{W=JSON.parse(localStorage.getItem("turnos2")||"[]")}catch(e){W=[]}render()}
+function saveLocal(){try{localStorage.setItem("turnos2",JSON.stringify(W))}catch(e){}}
+function persist(w){
+  if(col){col.doc(w.id).set({name:w.name,disp:w.disp}).then(()=>{if(msg){msg="";status()}}).catch(()=>{msg="No se pudo guardar en la nube. Revisa la conexión e inténtalo de nuevo.";status();if(CLOUD)refresh(true).catch(()=>{})});return}
+  saveLocal();
+}
+function removeW(id){
+  W=W.filter(w=>w.id!==id);open.delete(id);
+  if(col)col.doc(id).delete().catch(()=>{msg="No se pudo eliminar en la nube. Revisa la conexión.";status();if(CLOUD)refresh(true).catch(()=>{})});else saveLocal();
+}
+function query(){
+  const d=+$("qd").value,f=$("qf").value,t=$("qt").value;
+  if(!f||!t||f===t){$("qn").textContent="";$("rok").textContent="Revisa las horas.";$("rno").textContent="";return}
+  $("qn").textContent=endMin(t)<=toMin(f)?"Turno nocturno: termina a las "+t+" del día siguiente.":"";
+  const ok=[],no=[],over=endMin(t)<=toMin(f);
+  const lines=(w,day,pre,none)=>{const inf=dayInfo(w,day);return inf.length?inf.map(x=>pre+esc(x.t)+(x.note?" · "+esc(x.note):"")):[pre+none]};
+  const card=w=>{const L=over?lines(w,d,"Día "+D[d].slice(0,3)+": ","sin disponibilidad").concat(lines(w,(d+1)%7,"Día siguiente: ","sin disponibilidad")):lines(w,d,"","Sin disponibilidad ese día");return `<div><b>${esc(w.name)}</b><br><small>${L.join("<br>")}</small></div>`};
+  sortW(W).forEach(w=>{
+    if(canCover(w,d,f,t))ok.push(card(w));
+    else no.push(card(w));
+  });
+  $("rok").innerHTML=ok.join("")||"<small>Nadie</small>";
+  $("rno").innerHTML=no.join("")||"<small>Nadie</small>";
+}
+function render(){
+  const q=norm($("qs").value.trim());
+  const list=sortW(W).filter(w=>!q||norm(w.name).includes(q));
+  $("ws").innerHTML=list.map(w=>`<details data-id="${w.id}"${open.has(w.id)||(q&&list.length===1)?" open":""}><summary><b>${esc(w.name)}</b> <span class="mu">· ${w.disp.length} franjas</span></summary>
+  ${w.disp.map((b,i)=>`<div class="blk"><span>${b.days.map(x=>D[x].slice(0,3)).join(", ")} · ${hrsTxt(b)}${b.note?` <span class="mu">${esc(b.note)}</span>`:""}</span><button class="g" data-del="${w.id}:${i}">Quitar</button></div>`).join("")}
+  <div class="blk" style="display:block"><label>Disponible estos días <span class="mu">(sin horas = todo el día)</span></label>
+  <div class="days">${D.map((n,i)=>`<label><input type="checkbox" value="${i}">${n.slice(0,3)}</label>`).join("")}</div>
+  <div style="margin:6px 0"><button class="g" data-pre="0,1,2,3,4">Lun–Vie</button> <button class="g" data-pre="5,6">Fin de semana</button> <button class="g" data-pre="0,1,2,3,4,5,6">Todos</button></div>
+  <div class="hrs row" style="margin-bottom:8px"${hrs.has(w.id)?"":" hidden"}><div><label>Desde</label><input type="time" class="bf" value="08:00"></div><div><label>Hasta</label><input type="time" class="bt" value="15:00"></div></div>
+  <p class="mu hh" style="margin:0 0 8px"${hrs.has(w.id)?"":" hidden"}>Si «Hasta» es igual o anterior a «Desde», termina al día siguiente (ej. 23:00 → 04:00).</p>
+  <div class="row"><div><label>Nota</label><input class="bn" placeholder="Opcional"></div><button class="g" data-hrs="${w.id}">${hrs.has(w.id)?"Quitar horas (todo el día)":"Añadir horas"}</button><button data-addb="${w.id}">Añadir franja</button></div>
+  <p class="err"></p></div>
+  <button class="d" data-rm="${w.id}" style="margin-top:6px">${pend===w.id?"¿Seguro? Pulsa otra vez para eliminar":"Eliminar trabajador"}</button></details>`).join("")||`<p class="mu">${W.length?"Ningún trabajador coincide.":"Aún no hay trabajadores."}</p>`;
+  query();status();
+}
+document.addEventListener("toggle",e=>{const d=e.target;if(d.tagName==="DETAILS"&&d.dataset.id){d.open?open.add(d.dataset.id):open.delete(d.dataset.id)}},true);
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;
+  const ds=t.dataset;
+  if(ds.pre){const box=t.closest(".blk");const s=ds.pre.split(",");box.querySelectorAll(".days input").forEach(c=>c.checked=s.includes(c.value))}
+  else if(ds.hrs){const box=t.closest("details"),h=box.querySelector(".hrs"),hh=box.querySelector(".hh"),on=h.hidden;h.hidden=!on;hh.hidden=!on;if(on)hrs.add(ds.hrs);else hrs.delete(ds.hrs);t.textContent=on?"Quitar horas (todo el día)":"Añadir horas"}
+  else if(ds.del){const p=ds.del.split(":"),w=W.find(x=>x.id===p[0]);if(w){try{w.disp=w.disp.filter((_,k)=>k!==+p[1]);render();persist(w)}catch(x){msg="Error al guardar: "+x.message;status()}}}
+  else if(ds.rm){
+    if(pend===ds.rm){pend=null;removeW(ds.rm);render()}
+    else{pend=ds.rm;render();setTimeout(()=>{if(pend===ds.rm){pend=null;render()}},4000)}
+  }
+  else if(ds.addb){
+    const box=t.closest("details"),w=W.find(x=>x.id===ds.addb),er=box.querySelector(".err");
+    const days=[...box.querySelectorAll(".days input:checked")].map(x=>+x.value);
+    const todo=box.querySelector(".hrs").hidden,from=todo?"00:00":box.querySelector(".bf").value,to=todo?"23:59":box.querySelector(".bt").value,note=box.querySelector(".bn").value.trim();
+    if(!days.length){er.textContent="Marca al menos un día.";return}
+    if(!from||!to){er.textContent="Completa «Desde» y «Hasta», o quita las horas.";return}
+    if(from===to){er.textContent="«Desde» y «Hasta» no pueden ser iguales.";return}
+    try{w.disp=w.disp.concat([{days:days,from:from,to:to,note:note,todo:todo}]);open.add(w.id);render();persist(w)}catch(x){msg="Error al guardar: "+x.message;status()}
+  }
+});
+function addWorker(){
+  const n=$("nn").value.trim();
+  if(!n){$("e0").textContent="Escribe un nombre.";return}
+  $("e0").textContent="";
+  const w={id:"w"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:n,disp:[]};
+  W.push(w);open.add(w.id);$("nn").value="";$("qs").value="";persist(w);render()
+}
+$("add").addEventListener("click",addWorker);
+$("nn").addEventListener("keydown",e=>{if(e.key==="Enter")addWorker()});
+$("qs").addEventListener("input",render);
+D.forEach((n,i)=>$("qd").add(new Option(n,i)));
+["qd","qf","qt"].forEach(i=>$(i).addEventListener("change",query));
+function start(){if(CLOUD)startCloud();else{loadLocal();startDb()}}
+async function startDb(){
+  try{
+    const db=window.claude&&claude.use?await claude.use("db"):null;
+    if(!db)return;
+    col=db.collection("personal");
+    col.onSnapshot(s=>{W=s.docs.map(d=>fromSnap(d.id,d.data()));render()},()=>{col=null;msg="Sin conexión con la nube: se usan datos locales.";loadLocal()});
+    status();
+  }catch(e){col=null}
+}
+const HASH="a3c6b5795b6a4a4348e890818be1b9bdb282c94b6d4c26b9fbd15b792d1df7eb";
+async function sha(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("")}
+let started=false;
+function unlock(){$("gate").hidden=true;$("app").hidden=false;if(!started){started=true;start()}}
+let last="",poll=null,busyW=0;
+async function login(pw){
+  const r=await fetch(SB.url+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:SB.key,"Content-Type":"application/json"},body:JSON.stringify({email:SB.email,password:pw})});
+  if(!r.ok)return false;
+  const j=await r.json();tok=j.access_token;
+  try{sessionStorage.setItem("sb",JSON.stringify({t:tok,exp:Date.now()+(j.expires_in||3600)*1000-60000}))}catch(e){}
+  return true;
+}
+function lockUI(m){clearInterval(poll);started=false;tok="";try{sessionStorage.removeItem("sb")}catch(e){}$("app").hidden=true;$("gate").hidden=false;$("ge").textContent=m||""}
+async function api(method,path,body,extra){
+  const r=await fetch(SB.url+"/rest/v1/"+path,{method:method,headers:Object.assign({apikey:SB.key,Authorization:"Bearer "+tok,"Content-Type":"application/json"},extra||{}),body:body?JSON.stringify(body):undefined});
+  if(r.status===401){lockUI("Sesión caducada. Vuelve a entrar.");throw new Error("401")}
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return r.status===204?null:r.json().catch(()=>null);
+}
+async function refresh(force){
+  if(!force&&busyW>0)return;
+  const rows=await api("GET","personal?select=id,name,disp");
+  const s=JSON.stringify(rows);
+  if(s!==last||force){last=s;W=rows.map(r=>fromSnap(r.id,r));render()}
+}
+const wr=p=>{busyW++;return p.finally(()=>{busyW--})};
+async function startCloud(){
+  col={doc:id=>({
+    set:d=>wr(api("POST","personal",{id:id,name:d.name,disp:d.disp},{Prefer:"resolution=merge-duplicates,return=minimal"})),
+    delete:()=>wr(api("DELETE","personal?id=eq."+encodeURIComponent(id),null,{Prefer:"return=minimal"}))})};
+  try{await refresh(true);msg="";status()}catch(e){if(tok){msg="No se pudieron cargar los datos de la nube. Revisa la configuración.";status()}return}
+  clearInterval(poll);poll=setInterval(()=>refresh(false).catch(()=>{}),30000);
+}
+async function tryLogin(){
+  const pw=$("pw").value.trim();
+  try{
+    if(CLOUD){if(!(await login(pw))){$("ge").textContent="Contraseña incorrecta.";return}}
+    else if((await sha(pw))!==HASH){$("ge").textContent="Contraseña incorrecta.";return}
+    try{sessionStorage.setItem("ok","1")}catch(e){}
+    $("pw").value="";$("ge").textContent="";unlock()
+  }catch(e){$("ge").textContent=CLOUD?"No se pudo conectar con el servidor.":"Este navegador no permite verificar la contraseña."}
+}
+$("go").addEventListener("click",tryLogin);
+$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")tryLogin()});
+$("lock").addEventListener("click",()=>{try{sessionStorage.removeItem("ok")}catch(e){}lockUI("");$("pw").focus()});
+$("exp").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify({version:1,fecha:new Date().toISOString(),trabajadores:W},null,1)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="turnos-copia-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+});
+$("imp").addEventListener("click",()=>$("impf").click());
+$("impf").addEventListener("change",async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const j=JSON.parse(await f.text());
+    const list=(j.trabajadores||[]).map(x=>fromSnap(x.id||("w"+Date.now().toString(36)+Math.random().toString(36).slice(2,5)),x)).filter(x=>x.name);
+    if(!list.length){msg="El archivo no contiene trabajadores.";status();return}
+    list.forEach(w=>{const i=W.findIndex(x=>x.id===w.id);if(i>=0)W[i]=w;else W.push(w);persist(w)});
+    msg="Importados "+list.length+" trabajadores.";render();setTimeout(()=>{msg="";status()},6000);
+  }catch(err){msg="Archivo no válido.";status()}
+  e.target.value="";
+});
+try{if(CLOUD){const s=JSON.parse(sessionStorage.getItem("sb")||"null");if(s&&s.exp>Date.now()){tok=s.t;unlock()}}else if(sessionStorage.getItem("ok")==="1")unlock()}catch(e){}
+</script>
+</body>
+</html>
