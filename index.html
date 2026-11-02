@@ -98,6 +98,11 @@ function fromSnap(id,data){
   const x=JSON.parse(JSON.stringify(data||{}));
   return {id:id,name:typeof x.name==="string"?x.name:"",disp:Array.isArray(x.disp)?x.disp.filter(b=>b&&Array.isArray(b.days)&&b.from&&b.to):[]};
 }
+function otherNotes(w,days){
+  const m=new Map();
+  w.disp.forEach(b=>{if(!b.note||days.some(x=>segs(b,x).length))return;const s=m.get(b.note)||new Set();b.days.forEach(x=>s.add(x));m.set(b.note,s)});
+  return Array.from(m).map(e=>({note:e[0],days:Array.from(e[1]).sort((a,b)=>a-b)}));
+}
 /*ENDPURE*/
 let W=[],col=null,open=new Set(),hrs=new Set(),pend=null,msg="";
 const $=id=>document.getElementById(id);
@@ -119,7 +124,7 @@ function query(){
   $("qn").textContent=endMin(t)<=toMin(f)?"Turno nocturno: termina a las "+t+" del día siguiente.":"";
   const ok=[],no=[],over=endMin(t)<=toMin(f);
   const lines=(w,day,pre,none)=>{const inf=dayInfo(w,day);return inf.length?inf.map(x=>pre+esc(x.t)+(x.note?" · "+esc(x.note):"")):[pre+none]};
-  const card=w=>{const L=over?lines(w,d,"Día "+D[d].slice(0,3)+": ","sin disponibilidad").concat(lines(w,(d+1)%7,"Día siguiente: ","sin disponibilidad")):lines(w,d,"","Sin disponibilidad ese día");return `<div><b>${esc(w.name)}</b><br><small>${L.join("<br>")}</small></div>`};
+  const card=w=>{const L=over?lines(w,d,"Día "+D[d].slice(0,3)+": ","sin disponibilidad").concat(lines(w,(d+1)%7,"Día siguiente: ","sin disponibilidad")):lines(w,d,"","Sin disponibilidad ese día");return `<div><b>${esc(w.name)}</b><br><small>${L.join("<br>")}</small>${otherNotes(w,over?[d,(d+1)%7]:[d]).map(x=>`<br><small>Nota: ${esc(x.note)} (${x.days.map(k=>D[k].slice(0,3)).join(", ")})</small>`).join("")}</div>`};
   sortW(W).forEach(w=>{
     if(canCover(w,d,f,t))ok.push(card(w));
     else no.push(card(w));
